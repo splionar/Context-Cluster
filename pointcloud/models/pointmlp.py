@@ -5,8 +5,8 @@ import torch.nn.functional as F
 # from torch import einsum
 # from einops import rearrange, repeat
 
-
-from pointnet2_ops import pointnet2_utils
+from pytorch3d.ops import sample_farthest_points, knn_points
+#from pointnet2_ops import pointnet2_utils
 
 
 def get_activation(activation):
@@ -158,15 +158,17 @@ class LocalGrouper(nn.Module):
 
         # fps_idx = torch.multinomial(torch.linspace(0, N - 1, steps=N).repeat(B, 1).to(xyz.device), num_samples=self.groups, replacement=False).long()
         # fps_idx = farthest_point_sample(xyz, self.groups).long()
-        fps_idx = pointnet2_utils.furthest_point_sample(xyz, self.groups).long()  # [B, npoint]
-        new_xyz = index_points(xyz, fps_idx)  # [B, npoint, 3]
+        #fps_idx = pointnet2_utils.furthest_point_sample(xyz, self.groups).long()  # [B, npoint]
+        #new_xyz = index_points(xyz, fps_idx)  # [B, npoint, 3]
+        new_xyz, fps_idx = sample_farthest_points(xyz, K=self.groups)
         new_points = index_points(points, fps_idx)  # [B, npoint, d]
 
-        idx = knn_point(self.kneighbors, xyz, new_xyz)
+        #idx = knn_point(self.kneighbors, xyz, new_xyz)
+        _, idx, _ = knn_points(new_xyz, xyz, K=self.kneighbors, return_nn=False)
         # idx = query_ball_point(radius, nsample, xyz, new_xyz)
-        grouped_xyz = index_points(xyz, idx)  # [B, npoint, k, 3]
         grouped_points = index_points(points, idx)  # [B, npoint, k, d]
         if self.use_xyz:
+            grouped_xyz = index_points(xyz, idx)  # [B, npoint, k, 3]
             grouped_points = torch.cat([grouped_points, grouped_xyz],dim=-1)  # [B, npoint, k, d+3]
         if self.normalize is not None:
             if self.normalize =="center":
